@@ -160,13 +160,9 @@ iterator gen_start_ends(c: Cigar, ipos: int): pair {.inline.} =
     if last_stop != -1:
       yield (last_stop, int32(-1))
 
-proc inc_coverage(c: Cigar, ipos: int = 0, arr: var seq[int32]) {.inline.} =
+proc inc_coverage(c: Cigar, step: int32, ipos: int = 0, arr: var seq[int32]) {.inline.} =
   for p in gen_start_ends(c, ipos):
-      arr[p.pos] += p.value
-
-proc inc_isize(c: Cigar, isize: int32, ipos: int = 0, arr: var seq[int32]) {.inline.} =
-  for p in gen_start_ends(c, ipos):
-      arr[p.pos] += p.value * isize
+      arr[p.pos] += p.value * step
 
 iterator regions(bam: hts.Bam, region: region_t, tid: int, targets: seq[hts.Target]): Record {.inline.} =
   if region == nil:
@@ -233,7 +229,7 @@ proc init(arr: var coverage_t, tlen:int) =
       arr.set_len(int(tlen))
   zeroMem(arr[0].addr, len(arr) * sizeof(arr[0]))
 
-proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:int= -1, min_len:int= -1, max_len:int=int.high, eflag: uint16=1796, iflag:uint16=0, read_groups:seq[string]=(@[]), fast_mode:bool=false): int =
+proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:int= -1, min_len:int= -1, max_len:int=int.high, eflag: uint16=1796, iflag:uint16=0, read_groups:seq[string]=(@[]), fast_mode:bool=false, insert_size_mode:bool): int =
   # depth updates arr in-place and yields the tid for each chrom.
   # returns -1 if the chrom is not found in the bam header
   # returns -2 if the chrom was found in the header, but there was no data for it
@@ -269,6 +265,10 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:int=
     if tgt.tid != rec.b.core.tid:
         raise newException(OSError, "expected only a single chromosome per query")
 
+    var step:int32 = 1
+    if insert_size_mode:
+      step = int32(abs(rec.isize))
+
     # rec:   --------------
     # mate:             ------------
     # handle overlapping mate pairs.
@@ -286,8 +286,8 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:int=
           # rec:             ------------
           # decrement:       -----
           if rec.b.core.n_cigar == 1 and mate.b.core.n_cigar == 1:
-            dec(arr[rec.start])
-            inc(arr[mate.stop])
+            arr[rec.start] -= step
+            arr[mate.stop] += step
           else:
             # track the overlaps of pair.
             # anywhere there is overlap, the cumulative sum of pair.depth will be 2. we dec the start and inc the end of the overlap.
@@ -313,117 +313,21 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:int=
               # value is -1, then it is dropping back down to 1.
               if p.value == -1 and pair_depth == 2:
                 #if len(ses) > 4: stderr.write_line last_pos, " ", p.pos
-                dec(arr[last_pos])
-                inc(arr[p.pos])
+                arr[last_pos] -= step
+                arr[p.pos] += step
               pair_depth += p.value
               last_pos = p.pos
             if pair_depth != 0: echo $rec.qname & ":" & $rec & " " & $mate.qname & ":" & $mate & " " & $pair_depth
     if fast_mode:
-      arr[rec.start] += 1
-      arr[rec.stop] -= 1
+      arr[rec.start] += step
+      arr[rec.stop] -= step
     else:
-      inc_coverage(rec.cigar, rec.start.int, arr)
+      inc_coverage(rec.cigar, step, rec.start.int, arr)
 
   if not found:
     return -2
   return tgt.tid
 
-proc insert_sizes(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:int= -1, min_len:int= -1, max_len:int=int.high, eflag: uint16=1796, iflag:uint16=0, read_groups:seq[string]=(@[]), fast_mode:bool=false): int =
-  # depth updates arr in-place and yields the tid for each chrom.
-  # returns -1 if the chrom is not found in the bam header
-  # returns -2 if the chrom was found in the header, but there was no data for it
-  # otherwise returns the tid.
-  var
-    targets = bam.hdr.targets
-    tgt: hts.Target
-    mate: Record
-    seen = newTable[string, Record]()
-    has_read_groups = read_groups.len > 0
-
-  var tid = if region != nil: get_tid(targets, region.chrom) else: -1
-  if tid == -1:
-    return -1
-
-  tgt = targets[tid]
-
-  var found = false
-  for rec in bam.regions(region, tid, targets):
-    if not found:
-      arr.init(int(tgt.length+1))
-      found = true
-    if int(rec.mapping_quality) < mapq: continue
-    if int(abs(rec.isize)) < min_len or int(abs(rec.isize)) > max_len: continue
-    if (rec.flag and eflag) != 0:
-      continue
-    if iflag != 0 and ((rec.flag and iflag) == 0):
-      continue
-    if has_read_groups:
-      var t = tag[string](rec, "RG")
-      if t.isNone or not read_groups.contains(t.get):
-        continue
-    if tgt.tid != rec.b.core.tid:
-        raise newException(OSError, "expected only a single chromosome per query")
-
-    var isize:int32 = int32(abs(rec.isize))
-
-    # rec:   --------------
-    # mate:             ------------
-    # handle overlapping mate pairs.
-    if (not fast_mode) and rec.flag.proper_pair and (not rec.flag.supplementary):
-      if rec.b.core.tid == rec.b.core.mtid and rec.stop > rec.matepos and 
-        # First case is partial overlap, second case is complete overlap
-        # For complete overlap we must check if the mate was already seen or not yet
-        ((rec.start < rec.matepos) or (rec.start == rec.mate_pos and not seen.hasKey(rec.qname))):
-        var rc = rec.copy()
-        seen[rc.qname] = rc
-      else:
-        if seen.take(rec.qname, mate):
-          # we have an overlapping pair, and we know that mate is lower. e.g
-          # mate:   --------------
-          # rec:             ------------
-          # decrement:       -----
-          if rec.b.core.n_cigar == 1 and mate.b.core.n_cigar == 1:
-            arr[rec.start] -= isize
-            arr[mate.stop] += isize
-          else:
-            # track the overlaps of pair.
-            # anywhere there is overlap, the cumulative sum of pair.depth will be 2. we dec the start and inc the end of the overlap.
-            # this removes the double counting.
-            # e.g.:
-            # (pos: 4623171, value: 1)(pos: 4623223, value: 1)(pos: 4623240, value: -1)(pos: 4623241, value: 1)(pos: 4623264, value: -1)(pos: 4623320, value: -1)
-            # would dec the following intervals:
-            # 4623223 4623240
-            # 4623241 4623264
-            # chr1 4623171 69M1D23M9S (pos: 4623171, value: 1)(pos: 4623241, value: 1)(pos: 4623240, value: -1)(pos: 4623264, value: -1)
-            # chr1 4623223 4S97M (pos: 4623223, value: 1)(pos: 4623320, value: -1)
-            # each element will have a .value of 1 for start and -1 for end.
-
-            var ses = sequtils.to_seq(gen_start_ends(rec.cigar, rec.start.int))
-            for p in gen_start_ends(mate.cigar, mate.start.int):
-                ses.add(p)
-            alg.sort(ses, pair_sort)
-            var pair_depth = 0
-            var last_pos = 0
-            for p in ses:
-              assert pair_depth <= 2
-              # if we are at pair_depth 2, there is overlap and when the incoming
-              # value is -1, then it is dropping back down to 1.
-              if p.value == -1 and pair_depth == 2:
-                #if len(ses) > 4: stderr.write_line last_pos, " ", p.pos
-                arr[last_pos] -= isize
-                arr[p.pos] += isize
-              pair_depth += p.value
-              last_pos = p.pos
-            if pair_depth != 0: echo $rec.qname & ":" & $rec & " " & $mate.qname & ":" & $mate & " " & $pair_depth
-    if fast_mode:
-      arr[rec.start] += isize
-      arr[rec.stop] -= isize
-    else:
-      inc_isize(rec.cigar, isize, rec.start.int, arr)
-
-  if not found:
-    return -2
-  return tgt.tid
 
 proc bed_to_table(bed: string): TableRef[string, seq[region_t]] =
   var bed_regions = newTable[string, seq[region_t]]()
@@ -740,13 +644,7 @@ proc main(bam: hts.Bam, chrom: region_t, mapq: int, min_len: int, max_len: int, 
     if skip_per_base and thresholds.len == 0 and quantize.len == 0 and bed_regions != nil and not bed_regions.contains(target.name):
       continue
     rchrom = region_t(chrom: target.name)
-    #if insert_size_mode:
-      # Instead of coverage, collect the sum of insert sizes
-      # By later dividing by the coverage, you get the average insert sizes
-      # TODO(@ludvigolsen): Should probably do both coverages and insert sizes in same run
-      # if we end up doing this!
-    var fn = if insert_size_mode: insert_sizes else: coverage
-    var tid = fn(bam, arr, rchrom, mapq, min_len, max_len, eflag, iflag, read_groups=read_groups, fast_mode=fast_mode)
+    var tid = coverage(bam, arr, rchrom, mapq, min_len, max_len, eflag, iflag, read_groups=read_groups, fast_mode=fast_mode, insert_size_mode=insert_size_mode)
     #else:
     #  var tid = coverage(bam, arr, rchrom, mapq, min_len, max_len, eflag, iflag, read_groups=read_groups, fast_mode=fast_mode)
     if tid == -1: continue # -1 means that chrom is not even in the bam
