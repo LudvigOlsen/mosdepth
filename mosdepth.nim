@@ -647,7 +647,7 @@ proc to_tuples(targets:seq[Target]): seq[tuple[name:string, length:int]] =
     result[i] = (t.name, t.length.int)
 
 proc main(bam: hts.Bam, chrom: region_t, mapq: int, min_len: int, max_len: int, eflag: uint16, iflag: uint16, region: string, thresholds: seq[int],
-          fast_mode:bool, insert_size_mode:bool, args: Table[string, docopt.Value], use_median:bool=false, use_d4:bool=false) =
+          fast_mode:bool, args: Table[string, docopt.Value], insert_size_mode:bool=false, use_median:bool=false, use_d4:bool=false) =
   # windows are either from regions, or fixed-length windows.
   # we assume the input is sorted by chrom.
   var
@@ -999,4 +999,4 @@ Other options:
   discard bam.set_option(FormatOption.CRAM_OPT_DECODE_MD, 0)
   check_chrom(chrom, bam.hdr.targets)
 
-  main(bam, chrom, mapq, min_len, max_len, eflag, iflag, region, thresholds, fast_mode, insert_size_mode, args, use_median=use_median, use_d4=use_d4)
+  main(bam, chrom, mapq, min_len, max_len, eflag, iflag, region, thresholds, fast_mode, args, insert_size_mode=insert_size_mode, use_median=use_median, use_d4=use_d4)
