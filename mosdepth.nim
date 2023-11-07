@@ -745,7 +745,8 @@ proc main(bam: hts.Bam, chrom: region_t, mapq: int, min_len: int, max_len: int, 
       # By later dividing by the coverage, you get the average insert sizes
       # TODO(@ludvigolsen): Should probably do both coverages and insert sizes in same run
       # if we end up doing this!
-    var tid = insert_sizes(bam, arr, rchrom, mapq, min_len, max_len, eflag, iflag, read_groups=read_groups, fast_mode=fast_mode)
+    var fn = if insert_size_mode: insert_sizes else: coverage
+    var tid = fn(bam, arr, rchrom, mapq, min_len, max_len, eflag, iflag, read_groups=read_groups, fast_mode=fast_mode)
     #else:
     #  var tid = coverage(bam, arr, rchrom, mapq, min_len, max_len, eflag, iflag, read_groups=read_groups, fast_mode=fast_mode)
     if tid == -1: continue # -1 means that chrom is not even in the bam
