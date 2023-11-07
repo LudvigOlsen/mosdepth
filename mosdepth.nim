@@ -364,7 +364,7 @@ proc insert_sizes(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:
     if tgt.tid != rec.b.core.tid:
         raise newException(OSError, "expected only a single chromosome per query")
 
-    var isize:int32 = int32(abs(rec.isize))
+    # var isize:int32 = int32(abs(rec.isize))
 
     # rec:   --------------
     # mate:             ------------
@@ -383,8 +383,8 @@ proc insert_sizes(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:
           # rec:             ------------
           # decrement:       -----
           if rec.b.core.n_cigar == 1 and mate.b.core.n_cigar == 1:
-            arr[rec.start] -= isize
-            arr[mate.stop] += isize
+            arr[rec.start] -= int32(abs(rec.isize))
+            arr[mate.stop] += int32(abs(rec.isize))
           else:
             # track the overlaps of pair.
             # anywhere there is overlap, the cumulative sum of pair.depth will be 2. we dec the start and inc the end of the overlap.
@@ -410,16 +410,16 @@ proc insert_sizes(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:
               # value is -1, then it is dropping back down to 1.
               if p.value == -1 and pair_depth == 2:
                 #if len(ses) > 4: stderr.write_line last_pos, " ", p.pos
-                arr[last_pos] -= isize
-                arr[p.pos] += isize
+                arr[last_pos] -= int32(abs(rec.isize))
+                arr[p.pos] += int32(abs(rec.isize))
               pair_depth += p.value
               last_pos = p.pos
             if pair_depth != 0: echo $rec.qname & ":" & $rec & " " & $mate.qname & ":" & $mate & " " & $pair_depth
     if fast_mode:
-      arr[rec.start] += isize
-      arr[rec.stop] -= isize
+      arr[rec.start] += int32(abs(rec.isize))
+      arr[rec.stop] -= int32(abs(rec.isize))
     else:
-      inc_isize(rec.cigar, isize, rec.start.int, arr)
+      inc_isize(rec.cigar, int32(abs(rec.isize)), rec.start.int, arr)
 
   if not found:
     return -2
