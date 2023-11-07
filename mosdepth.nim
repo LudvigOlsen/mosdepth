@@ -645,8 +645,6 @@ proc main(bam: hts.Bam, chrom: region_t, mapq: int, min_len: int, max_len: int, 
       continue
     rchrom = region_t(chrom: target.name)
     var tid = coverage(bam, arr, rchrom, mapq, min_len, max_len, eflag, iflag, read_groups=read_groups, fast_mode=fast_mode, insert_size_mode=insert_size_mode)
-    #else:
-    #  var tid = coverage(bam, arr, rchrom, mapq, min_len, max_len, eflag, iflag, read_groups=read_groups, fast_mode=fast_mode)
     if tid == -1: continue # -1 means that chrom is not even in the bam
     if tid != -2: # -2 means there were no reads in the bam
       arr.to_coverage()
