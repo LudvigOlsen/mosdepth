@@ -166,7 +166,7 @@ proc inc_coverage(c: Cigar, ipos: int = 0, arr: var seq[int32]) {.inline.} =
 
 proc inc_isize(c: Cigar, isize: int, ipos: int = 0, arr: var seq[int32]) {.inline.} =
   for p in gen_start_ends(c, ipos):
-      arr[p.pos] += p.value * int32(abs(isize))
+      arr[p.pos] += p.value * isize
 
 iterator regions(bam: hts.Bam, region: region_t, tid: int, targets: seq[hts.Target]): Record {.inline.} =
   if region == nil:
@@ -364,6 +364,8 @@ proc insert_sizes(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:
     if tgt.tid != rec.b.core.tid:
         raise newException(OSError, "expected only a single chromosome per query")
 
+    var isize:int32 = int32(abs(rec.isize))
+
     # rec:   --------------
     # mate:             ------------
     # handle overlapping mate pairs.
@@ -381,8 +383,8 @@ proc insert_sizes(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:
           # rec:             ------------
           # decrement:       -----
           if rec.b.core.n_cigar == 1 and mate.b.core.n_cigar == 1:
-            arr[rec.start] -= rec.isize
-            arr[mate.stop] += rec.isize
+            arr[rec.start] -= isize
+            arr[mate.stop] += isize
           else:
             # track the overlaps of pair.
             # anywhere there is overlap, the cumulative sum of pair.depth will be 2. we dec the start and inc the end of the overlap.
@@ -408,16 +410,16 @@ proc insert_sizes(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:
               # value is -1, then it is dropping back down to 1.
               if p.value == -1 and pair_depth == 2:
                 #if len(ses) > 4: stderr.write_line last_pos, " ", p.pos
-                arr[last_pos] -= rec.isize
-                arr[p.pos] += rec.isize
+                arr[last_pos] -= isize
+                arr[p.pos] += isize
               pair_depth += p.value
               last_pos = p.pos
             if pair_depth != 0: echo $rec.qname & ":" & $rec & " " & $mate.qname & ":" & $mate & " " & $pair_depth
     if fast_mode:
-      arr[rec.start] += rec.isize
-      arr[rec.stop] -= rec.isize
+      arr[rec.start] += isize
+      arr[rec.stop] -= isize
     else:
-      inc_isize(rec.cigar, rec.isize, rec.start.int, arr)
+      inc_isize(rec.cigar, isize, rec.start.int, arr)
 
   if not found:
     return -2
