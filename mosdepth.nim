@@ -166,7 +166,7 @@ proc inc_coverage(c: Cigar, ipos: int = 0, arr: var seq[int32]) {.inline.} =
 
 proc inc_isize(c: Cigar, isize: int, ipos: int = 0, arr: var seq[int32]) {.inline.} =
   for p in gen_start_ends(c, ipos):
-      arr[p.pos] += int(p.value) * abs(isize)
+      arr[p.pos] += p.value * int32(abs(isize))
 
 iterator regions(bam: hts.Bam, region: region_t, tid: int, targets: seq[hts.Target]): Record {.inline.} =
   if region == nil:
