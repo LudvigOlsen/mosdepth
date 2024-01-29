@@ -10,6 +10,7 @@ import strformat
 import docopt
 import times
 import math
+import hts/[simpleoption]
 import ./depthstat
 
 when defined(d4):
@@ -229,6 +230,13 @@ proc init(arr: var coverage_t, tlen:int) =
       arr.set_len(int(tlen))
   zeroMem(arr[0].addr, len(arr) * sizeof(arr[0]))
 
+proc getFloatFromOption(opt: simpleoption.Option[float], err: string): float =
+  if opt.isSome:
+    return opt.get()
+  else:
+    raise newException(ValueError, err)
+
+
 proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:int= -1, min_len:int= -1, max_len:int=int.high, eflag: uint16=1796, iflag:uint16=0, read_groups:seq[string]=(@[]), fast_mode:bool=false, insert_size_mode:bool, gc_mode:bool): int =
   # depth updates arr in-place and yields the tid for each chrom.
   # returns -1 if the chrom is not found in the bam header
@@ -266,11 +274,12 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:int=
         raise newException(OSError, "expected only a single chromosome per query")
 
     var step:int32 = 1
+    var gc_weight:float64 = 0.0
     if insert_size_mode:
       step = int32(abs(rec.isize))
     elif gc_mode:
-      step = int32(abs(tag[float](rec, "GC")*100.0))
-      echo step
+      gc_weight = float64(getFloatFromOption(tag[system.float](rec, "GC"), "no GC tag was found in a record. All records (reads) must have the GC tag."))
+      step = int32(abs(gc_weight*float64(100.0)))
 
     # rec:   --------------
     # mate:             ------------
