@@ -229,7 +229,7 @@ proc init(arr: var coverage_t, tlen:int) =
       arr.set_len(int(tlen))
   zeroMem(arr[0].addr, len(arr) * sizeof(arr[0]))
 
-proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:int= -1, min_len:int= -1, max_len:int=int.high, eflag: uint16=1796, iflag:uint16=0, read_groups:seq[string]=(@[]), fast_mode:bool=false, insert_size_mode:bool): int =
+proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:int= -1, min_len:int= -1, max_len:int=int.high, eflag: uint16=1796, iflag:uint16=0, read_groups:seq[string]=(@[]), fast_mode:bool=false, insert_size_mode:bool, gc_mode:bool): int =
   # depth updates arr in-place and yields the tid for each chrom.
   # returns -1 if the chrom is not found in the bam header
   # returns -2 if the chrom was found in the header, but there was no data for it
@@ -268,6 +268,9 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:int=
     var step:int32 = 1
     if insert_size_mode:
       step = int32(abs(rec.isize))
+    elif gc_mode:
+      step = int32(abs(tag[float](rec, "GC")*100.0))
+      echo step
 
     # rec:   --------------
     # mate:             ------------
@@ -551,7 +554,7 @@ proc to_tuples(targets:seq[Target]): seq[tuple[name:string, length:int]] =
     result[i] = (t.name, t.length.int)
 
 proc main(bam: hts.Bam, chrom: region_t, mapq: int, min_len: int, max_len: int, eflag: uint16, iflag: uint16, region: string, thresholds: seq[int],
-          fast_mode:bool, args: Table[string, docopt.Value], insert_size_mode:bool=false, use_median:bool=false, use_d4:bool=false) =
+          fast_mode:bool, args: Table[string, docopt.Value], insert_size_mode:bool=false, gc_mode:bool=false, use_median:bool=false, use_d4:bool=false) =
   # windows are either from regions, or fixed-length windows.
   # we assume the input is sorted by chrom.
   var
@@ -644,7 +647,7 @@ proc main(bam: hts.Bam, chrom: region_t, mapq: int, min_len: int, max_len: int, 
     if skip_per_base and thresholds.len == 0 and quantize.len == 0 and bed_regions != nil and not bed_regions.contains(target.name):
       continue
     rchrom = region_t(chrom: target.name)
-    var tid = coverage(bam, arr, rchrom, mapq, min_len, max_len, eflag, iflag, read_groups=read_groups, fast_mode=fast_mode, insert_size_mode=insert_size_mode)
+    var tid = coverage(bam, arr, rchrom, mapq, min_len, max_len, eflag, iflag, read_groups=read_groups, fast_mode=fast_mode, insert_size_mode=insert_size_mode, gc_mode=gc_mode)
     if tid == -1: continue # -1 means that chrom is not even in the bam
     if tid != -2: # -2 means there were no reads in the bam
       arr.to_coverage()
@@ -826,6 +829,7 @@ Other options:
   -i --include-flag <FLAG>          only include reads with any of the bits in FLAG set. default is unset. [default: 0]
   -x --fast-mode                    dont look at internal cigar operations or correct mate overlaps (recommended for most use-cases).
   -S --insert-size-mode             extract the sum of insert sizes instead of coverage.
+  -G --gc-mode                      count up a GC weight via the 'GC' tag instead of 1. TODO: generalize!
   -q --quantize <segments>          write quantized output see docs for description.
   -Q --mapq <mapq>                  mapping quality threshold. reads with a quality less than this value are ignored [default: 0]
   -l --min-frag-len <min-frag-len>  minimum insert size. reads with a smaller insert size than this are ignored [default: -1]
@@ -859,6 +863,7 @@ Other options:
     thresholds: seq[int] = threshold_args($args["--thresholds"])
     fast_mode:bool = args["--fast-mode"]
     insert_size_mode:bool = args["--insert-size-mode"]
+    gc_mode:bool = args["--gc-mode"]
     use_median:bool = args["--use-median"]
   when defined(d4):
     var use_d4:bool = args["--d4"] and not args["--no-per-base"]
@@ -899,4 +904,4 @@ Other options:
   discard bam.set_option(FormatOption.CRAM_OPT_DECODE_MD, 0)
   check_chrom(chrom, bam.hdr.targets)
 
-  main(bam, chrom, mapq, min_len, max_len, eflag, iflag, region, thresholds, fast_mode, args, insert_size_mode=insert_size_mode, use_median=use_median, use_d4=use_d4)
+  main(bam, chrom, mapq, min_len, max_len, eflag, iflag, region, thresholds, fast_mode, args, insert_size_mode=insert_size_mode, gc_mode=gc_mode, use_median=use_median, use_d4=use_d4)
