@@ -279,7 +279,9 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, mapq:int=
       step = int32(abs(rec.isize))
     elif gc_mode:
       gc_weight = float64(getFloatFromOption(tag[system.float](rec, "GC"), "no GC tag was found in a record. All records (reads) must have the GC tag."))
-      step = int32(abs(gc_weight*float64(100.0)))
+      if gc_weight <= float64(0.0):
+        continue
+      step = int32(gc_weight*float64(100.0))
 
     # rec:   --------------
     # mate:             ------------
