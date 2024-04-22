@@ -1,3 +1,16 @@
+v0.3.8
+======
++ mosdepth is now much faster on bams/crams with a large number of contigs (#229)
+
+v0.3.7
+======
++ support CRAM v3.1. only updates htslib that binary is built with to v1.19.1 (#224)
+
+v0.3.6
+======
++ allow filtering on fragment length thanks @LudvigOlsen for implementing! (#214)
++ fix bug where empty chromosomes are not reported as having 0 depth (#216)
+
 v0.3.5
 ======
 + fix bug with summary min for regions (#207 thanks to Xavier for supplying test-case)

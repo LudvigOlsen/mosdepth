@@ -67,15 +67,15 @@ assert_equal "MT 0 80 1 MT 80 16569 0 " "$(zgrep ^MT t.per-base.bed.gz | tr -s '
 
 run length_filter $exe t tests/ovl.bam --min-frag-len 81
 assert_exit_code 0
-assert_equal "MT        0       16569   0" "$(zgrep ^MT t.per-base.bed.gz)"
+assert_equal "MT	0	16569	0" "$(zgrep ^MT t.per-base.bed.gz)"
 
 run length_filter $exe t tests/ovl.bam --max-frag-len 79
 assert_exit_code 0
-assert_equal "MT        0       16569   0" "$(zgrep ^MT t.per-base.bed.gz)"
+assert_equal "MT	0	16569	0" "$(zgrep ^MT t.per-base.bed.gz)"
 
 run bad_frag_len_filter $exe t tests/ovl.bam --min-frag-len 10 --max-frag-len 9
 assert_in_stderr "--max-frag-len was lower than --min-frag-len."
-assert_exit_code 1
+assert_exit_code 2
 
 
 unset MOSDEPTH_Q0
@@ -152,7 +152,7 @@ rm -f t.*
 
 #regions and global should not be the same when -b is specified
 run regions $exe t_regions -n -b 100 tests/empty-tids.bam 
-assert_equal $(diff -u t_regions.mosdepth.region.dist.txt t_regions.mosdepth.global.dist.txt | wc -l) 1447
+assert_equal $(diff -u t_regions.mosdepth.region.dist.txt t_regions.mosdepth.global.dist.txt | wc -l) 1436
 rm -f t_regions.*
 
 run overlappingPairs $exe t tests/overlapping-pairs.bam
