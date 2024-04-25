@@ -10,6 +10,7 @@ import strformat
 import docopt
 import times
 import math
+import hts/[simpleoption]
 import ./depthstat
 
 when defined(d4):
@@ -160,9 +161,9 @@ iterator gen_start_ends(c: Cigar, ipos: int): pair {.inline.} =
     if last_stop != -1:
       yield (last_stop, int32(-1))
 
-proc inc_coverage(c: Cigar, ipos: int = 0, arr: var seq[int32]) {.inline.} =
+proc inc_coverage(c: Cigar, step: int32, ipos: int = 0, arr: var seq[int32]) {.inline.} =
   for p in gen_start_ends(c, ipos):
-      arr[p.pos] += p.value
+      arr[p.pos] += p.value * step
 
 iterator regions(bam: hts.Bam, region: region_t, tid: int, targets: seq[hts.Target]): Record {.inline.} =
   if region == nil:
@@ -233,7 +234,14 @@ proc init(arr: var coverage_t, tlen:int) =
       arr.set_len(int(tlen))
   zeroMem(arr[0].addr, len(arr) * sizeof(arr[0]))
 
-proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, targets: seq[Target], mapq:int= -1, min_len:int= -1, max_len:int=int.high, eflag: uint16=1796, iflag:uint16=0, read_groups:seq[string]=(@[]), fast_mode:bool=false, last_tid: var int = -1): int =
+proc getFloatFromOption(opt: simpleoption.Option[float], err: string): float =
+  if opt.isSome:
+    return opt.get()
+  else:
+    raise newException(ValueError, err)
+
+
+proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, targets: seq[Target], mapq:int= -1, min_len:int= -1, max_len:int=int.high, eflag: uint16=1796, iflag:uint16=0, read_groups:seq[string]=(@[]), fast_mode:bool=false, last_tid: var int = -1, insert_size_mode:bool, gc_mode:bool): int =
   # depth updates arr in-place and yields the tid for each chrom.
   # returns -1 if the chrom is not found in the bam header
   # returns -2 if the chrom was found in the header, but there was no data for it
@@ -268,6 +276,16 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, targets: 
     if tgt.tid != rec.b.core.tid:
         raise newException(OSError, "expected only a single chromosome per query")
 
+    var step:int32 = 1
+    var gc_weight:float64 = 0.0
+    if insert_size_mode:
+      step = int32(abs(rec.isize))
+    elif gc_mode:
+      gc_weight = float64(getFloatFromOption(tag[system.float](rec, "GC"), "no GC tag was found in a record. All records (reads) must have the GC tag."))
+      if gc_weight <= float64(0.0):
+        continue
+      step = int32(gc_weight*float64(100.0))
+
     # rec:   --------------
     # mate:             ------------
     # handle overlapping mate pairs.
@@ -285,8 +303,8 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, targets: 
           # rec:             ------------
           # decrement:       -----
           if rec.b.core.n_cigar == 1 and mate.b.core.n_cigar == 1:
-            dec(arr[rec.start])
-            inc(arr[mate.stop])
+            arr[rec.start] -= step
+            arr[mate.stop] += step
           else:
             # track the overlaps of pair.
             # anywhere there is overlap, the cumulative sum of pair.depth will be 2. we dec the start and inc the end of the overlap.
@@ -312,20 +330,21 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, targets: 
               # value is -1, then it is dropping back down to 1.
               if p.value == -1 and pair_depth == 2:
                 #if len(ses) > 4: stderr.write_line last_pos, " ", p.pos
-                dec(arr[last_pos])
-                inc(arr[p.pos])
+                arr[last_pos] -= step
+                arr[p.pos] += step
               pair_depth += p.value
               last_pos = p.pos
             if pair_depth != 0: echo $rec.qname & ":" & $rec & " " & $mate.qname & ":" & $mate & " " & $pair_depth
     if fast_mode:
-      arr[rec.start] += 1
-      arr[rec.stop] -= 1
+      arr[rec.start] += step
+      arr[rec.stop] -= step
     else:
-      inc_coverage(rec.cigar, rec.start.int, arr)
+      inc_coverage(rec.cigar, step, rec.start.int, arr)
 
   if not found:
     return -2
   return tgt.tid
+
 
 proc bed_to_table(bed: string): TableRef[string, seq[region_t]] =
   var bed_regions = newTable[string, seq[region_t]]()
@@ -548,7 +567,7 @@ proc to_tuples(targets:seq[Target]): seq[tuple[name:string, length:int]] =
     result[i] = (t.name, t.length.int)
 
 proc main(bam: hts.Bam, chrom: region_t, mapq: int, min_len: int, max_len: int, eflag: uint16, iflag: uint16, region: string, thresholds: seq[int],
-          fast_mode:bool, args: Table[string, docopt.Value], use_median:bool=false, use_d4:bool=false) =
+          fast_mode:bool, args: Table[string, docopt.Value], insert_size_mode:bool=false, gc_mode:bool=false, use_median:bool=false, use_d4:bool=false) =
   # windows are either from regions, or fixed-length windows.
   # we assume the input is sorted by chrom.
   var
@@ -648,7 +667,7 @@ proc main(bam: hts.Bam, chrom: region_t, mapq: int, min_len: int, max_len: int, 
     if skip_per_base and thresholds.len == 0 and quantize.len == 0 and bed_regions != nil and not bed_regions.contains(target.name):
       continue
     rchrom = region_t(chrom: target.name)
-    var tid = coverage(bam, arr, rchrom, targets, mapq, min_len, max_len, eflag, iflag, read_groups=read_groups, fast_mode=fast_mode, last_tid=last_tid)
+    var tid = coverage(bam, arr, rchrom, targets, mapq, min_len, max_len, eflag, iflag, read_groups=read_groups, fast_mode=fast_mode, last_tid=last_tid, insert_size_mode=insert_size_mode, gc_mode=gc_mode)
     if tid == -1: continue # -1 means that chrom is not even in the bam
     if tid != -2: # -2 means there were no reads in the bam
       arr.to_coverage()
@@ -830,6 +849,8 @@ Other options:
   -F --flag <FLAG>                  exclude reads with any of the bits in FLAG set [default: 1796]
   -i --include-flag <FLAG>          only include reads with any of the bits in FLAG set. default is unset. [default: 0]
   -x --fast-mode                    dont look at internal cigar operations or correct mate overlaps (recommended for most use-cases).
+  -S --insert-size-mode             extract the sum of insert sizes instead of coverage.
+  -G --gc-mode                      count up a GC weight via the 'GC' tag instead of 1. Allows using mosdepth with GCparagon. Current implementation multiplies the weights by 100 and converts to integers to maintain the integer array. So divide the output coverages by 100 to get the (rounded) weighted coverage.
   -q --quantize <segments>          write quantized output see docs for description.
   -Q --mapq <mapq>                  mapping quality threshold. reads with a quality less than this value are ignored [default: 0]
   -l --min-frag-len <min-frag-len>  minimum insert size. reads with a smaller insert size than this are ignored [default: -1]
@@ -862,6 +883,8 @@ Other options:
     region: string
     thresholds: seq[int] = threshold_args($args["--thresholds"])
     fast_mode:bool = args["--fast-mode"]
+    insert_size_mode:bool = args["--insert-size-mode"]
+    gc_mode:bool = args["--gc-mode"]
     use_median:bool = args["--use-median"]
   when defined(d4):
     var use_d4:bool = args["--d4"] and not args["--no-per-base"]
@@ -902,4 +925,4 @@ Other options:
   discard bam.set_option(FormatOption.CRAM_OPT_DECODE_MD, 0)
   check_chrom(chrom, bam.hdr.targets)
 
-  main(bam, chrom, mapq, min_len, max_len, eflag, iflag, region, thresholds, fast_mode, args, use_median=use_median, use_d4=use_d4)
+  main(bam, chrom, mapq, min_len, max_len, eflag, iflag, region, thresholds, fast_mode, args, insert_size_mode=insert_size_mode, gc_mode=gc_mode, use_median=use_median, use_d4=use_d4)
