@@ -1,4 +1,4 @@
-NOTE: This is a fork with project-specific custom modifications. It adds --gc-mode for for counting up a GC tag weight, as made by GCparagon, and --insert-size-mode for counting up the sum of insert sizes instead of the coverage.
+NOTE: This is a fork with project-specific custom modifications. It adds `--gc-mode` for for counting up a GC tag weight, as made by `GCparagon`, and `--insert-size-mode` for counting up the sum of insert sizes instead of the coverage.
 
 ---
 
