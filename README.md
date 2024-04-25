@@ -1,3 +1,7 @@
+NOTE: This is a fork with project-specific custom modifications. It adds --gc-mode for for counting up a GC tag weight, as made by GCparagon, and --insert-size-mode for counting up the sum of insert sizes instead of the coverage.
+
+---
+
 fast BAM/CRAM depth calculation for **WGS**, **exome**, or **targeted sequencing**.
 [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat-square)](http://bioconda.github.io/recipes/mosdepth/README.html)
 
@@ -55,6 +59,8 @@ Other options:
   -F --flag <FLAG>                  exclude reads with any of the bits in FLAG set [default: 1796]
   -i --include-flag <FLAG>          only include reads with any of the bits in FLAG set. default is unset. [default: 0]
   -x --fast-mode                    dont look at internal cigar operations or correct mate overlaps (recommended for most use-cases).
+  -S --insert-size-mode             extract the sum of insert sizes instead of coverage.
+  -G --gc-mode                      count up a GC weight via the 'GC' tag instead of 1. Allows using mosdepth with GCparagon. Current implementation multiplies the weights by 100 and converts to integers to maintain the integer array. So divide the output coverages by 100 to get the (rounded) weighted coverage.
   -q --quantize <segments>          write quantized output see docs for description.
   -Q --mapq <mapq>                  mapping quality threshold. reads with a quality less than this value are ignored [default: 0]
   -l --min-frag-len <min-frag-len>  minimum insert size. reads with a smaller insert size than this are ignored [default: -1]

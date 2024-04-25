@@ -850,7 +850,7 @@ Other options:
   -i --include-flag <FLAG>          only include reads with any of the bits in FLAG set. default is unset. [default: 0]
   -x --fast-mode                    dont look at internal cigar operations or correct mate overlaps (recommended for most use-cases).
   -S --insert-size-mode             extract the sum of insert sizes instead of coverage.
-  -G --gc-mode                      count up a GC weight via the 'GC' tag instead of 1. TODO: generalize!
+  -G --gc-mode                      count up a GC weight via the 'GC' tag instead of 1. Allows using mosdepth with GCparagon. Current implementation multiplies the weights by 100 and converts to integers to maintain the integer array. So divide the output coverages by 100 to get the (rounded) weighted coverage.
   -q --quantize <segments>          write quantized output see docs for description.
   -Q --mapq <mapq>                  mapping quality threshold. reads with a quality less than this value are ignored [default: 0]
   -l --min-frag-len <min-frag-len>  minimum insert size. reads with a smaller insert size than this are ignored [default: -1]
