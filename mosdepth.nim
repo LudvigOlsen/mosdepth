@@ -360,8 +360,8 @@ proc bed_to_table(bed: string): TableRef[string, seq[region_t]] =
     bed_regions.mgetOrPut(v.chrom, new_seq[region_t]()).add(v)
 
   # since it is read into mem, can also well sort.
-  for chrom, ivs in bed_regions.mpairs:
-      sort(ivs, proc (a, b: region_t): int = int(a.start) - int(b.start))
+  #for chrom, ivs in bed_regions.mpairs:
+  #    sort(ivs, proc (a, b: region_t): int = int(a.start) - int(b.start))
 
   hts.free(kstr.s)
   return bed_regions
