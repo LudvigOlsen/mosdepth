@@ -241,7 +241,7 @@ proc getFloatFromOption(opt: simpleoption.Option[float], err: string): float =
     raise newException(ValueError, err)
 
 
-proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, targets: seq[Target], mapq:int= -1, min_len:int= -1, max_len:int=int.high, eflag: uint16=1796, iflag:uint16=0, read_groups:seq[string]=(@[]), fast_mode:bool=false, last_tid: var int = -1, insert_size_mode:bool, gc_mode:bool): int =
+proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, targets: seq[Target], mapq:int= -1, min_len:int= -1, max_len:int=int.high, eflag: uint16=1796, iflag:uint16=0, read_groups:seq[string]=(@[]), fast_mode:bool=false, last_tid: var int = -1, insert_size_mode:bool, gc_mode:bool, midpoint_mode:bool): int =
   # depth updates arr in-place and yields the tid for each chrom.
   # returns -1 if the chrom is not found in the bam header
   # returns -2 if the chrom was found in the header, but there was no data for it
@@ -275,6 +275,9 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, targets: 
         continue
     if tgt.tid != rec.b.core.tid:
         raise newException(OSError, "expected only a single chromosome per query")
+
+    # if midpoint_mode:
+
 
     var step:int32 = 1
     var gc_weight:float64 = 0.0
@@ -567,7 +570,7 @@ proc to_tuples(targets:seq[Target]): seq[tuple[name:string, length:int]] =
     result[i] = (t.name, t.length.int)
 
 proc main(bam: hts.Bam, chrom: region_t, mapq: int, min_len: int, max_len: int, eflag: uint16, iflag: uint16, region: string, thresholds: seq[int],
-          fast_mode:bool, args: Table[string, docopt.Value], insert_size_mode:bool=false, gc_mode:bool=false, use_median:bool=false, use_d4:bool=false) =
+          fast_mode:bool, args: Table[string, docopt.Value], insert_size_mode:bool=false, gc_mode:bool=false, use_median:bool=false, midpoint_mode:bool=false, use_d4:bool=false) =
   # windows are either from regions, or fixed-length windows.
   # we assume the input is sorted by chrom.
   var
@@ -667,7 +670,7 @@ proc main(bam: hts.Bam, chrom: region_t, mapq: int, min_len: int, max_len: int, 
     if skip_per_base and thresholds.len == 0 and quantize.len == 0 and bed_regions != nil and not bed_regions.contains(target.name):
       continue
     rchrom = region_t(chrom: target.name)
-    var tid = coverage(bam, arr, rchrom, targets, mapq, min_len, max_len, eflag, iflag, read_groups=read_groups, fast_mode=fast_mode, last_tid=last_tid, insert_size_mode=insert_size_mode, gc_mode=gc_mode)
+    var tid = coverage(bam, arr, rchrom, targets, mapq, min_len, max_len, eflag, iflag, read_groups=read_groups, fast_mode=fast_mode, last_tid=last_tid, insert_size_mode=insert_size_mode, gc_mode=gc_mode, midpoint_mode=midpoint_mode)
     if tid == -1: continue # -1 means that chrom is not even in the bam
     if tid != -2: # -2 means there were no reads in the bam
       arr.to_coverage()
@@ -851,6 +854,7 @@ Other options:
   -x --fast-mode                    dont look at internal cigar operations or correct mate overlaps (recommended for most use-cases).
   -S --insert-size-mode             extract the sum of insert sizes instead of coverage.
   -G --gc-mode                      count up a GC weight via the 'GC' tag instead of 1. Allows using mosdepth with GCparagon. Current implementation multiplies the weights by 100 and converts to integers to maintain the integer array. So divide the output coverages by 100 to get the (rounded) weighted coverage.
+  -M --midpoint-mode <FLAG>         calculate the fragment midpoint coverage instead of the full fragment coverage.
   -q --quantize <segments>          write quantized output see docs for description.
   -Q --mapq <mapq>                  mapping quality threshold. reads with a quality less than this value are ignored [default: 0]
   -l --min-frag-len <min-frag-len>  minimum insert size. reads with a smaller insert size than this are ignored [default: -1]
@@ -885,6 +889,7 @@ Other options:
     fast_mode:bool = args["--fast-mode"]
     insert_size_mode:bool = args["--insert-size-mode"]
     gc_mode:bool = args["--gc-mode"]
+    midpoint_mode:bool = args["--midpoint-mode"]
     use_median:bool = args["--use-median"]
   when defined(d4):
     var use_d4:bool = args["--d4"] and not args["--no-per-base"]
@@ -925,4 +930,4 @@ Other options:
   discard bam.set_option(FormatOption.CRAM_OPT_DECODE_MD, 0)
   check_chrom(chrom, bam.hdr.targets)
 
-  main(bam, chrom, mapq, min_len, max_len, eflag, iflag, region, thresholds, fast_mode, args, insert_size_mode=insert_size_mode, gc_mode=gc_mode, use_median=use_median, use_d4=use_d4)
+  main(bam, chrom, mapq, min_len, max_len, eflag, iflag, region, thresholds, fast_mode, args, insert_size_mode=insert_size_mode, gc_mode=gc_mode, use_median=use_median, midpoint_mode=midpoint_mode, use_d4=use_d4)
