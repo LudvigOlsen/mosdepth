@@ -236,11 +236,11 @@ proc init(arr: var coverage_t, tlen: int) =
   zeroMem(arr[0].addr, len(arr) * sizeof(arr[0]))
 
 proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, 
-  targets: seq[Target], mapq:int= -1, min_len:int= -1, 
-  max_len:int=int.high, eflag: uint16=1796, iflag:uint16=0, 
-  read_groups:seq[string]=(@[]), fast_mode:bool=false, 
-  last_tid: var int = -1, insert_size_mode:bool, gc_mode:bool, 
-  midpoint_mode:bool): int =
+  targets: seq[Target], mapq: int = -1, min_len: int = -1, 
+  max_len: int = int.high, eflag: uint16 = 1796, iflag: uint16 = 0, 
+  read_groups: seq[string] = (@[]), fast_mode: bool = false, 
+  last_tid: var int = -1, insert_size_mode: bool, gc_mode: bool, 
+  fragment_mode: bool, midpoint_mode : bool): int =
   # depth updates arr in-place and yields the tid for each chrom.
   # returns -1 if the chrom is not found in the bam header
   # returns -2 if the chrom was found in the header, but there was no data for it
@@ -275,18 +275,15 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t,
     if tgt.tid != rec.b.core.tid:
       raise newException(OSError, "expected only a single chromosome per query")
 
-    # if midpoint_mode:
-
-
-    var step:int32 = 1
-    var gc_weight:float64 = 0.0
+    var step: int32 = 1
+    var gc_weight: float64 = 0.0
     if insert_size_mode:
       step = int32(abs(rec.isize))
     elif gc_mode:
       gc_weight = float64(getFloatFromOption(tag[system.float](rec, "GC"), "no GC tag was found in a record. All records (reads) must have the GC tag."))
       if gc_weight <= float64(0.0):
         continue
-      step = int32(gc_weight*float64(100.0))
+      step = int32(gc_weight * float64(100.0))
 
     # rec:   --------------
     # mate:             ------------
@@ -351,8 +348,14 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t,
         continue
       
       var fragment_start = min(rec.start, rec.matepos)
-      arr[fragment_start] += step
-      arr[fragment_start + abs(rec.isize)] -= step
+
+      if midpoint_mode:
+        var midpoint = fragment_start + (abs(rec.isize) div 2)
+        arr[midpoint] += step
+        arr[midpoint + 1] -= step
+      else:
+        arr[fragment_start] += step
+        arr[fragment_start + abs(rec.isize)] -= step
       
     else:
       inc_coverage(rec.cigar, step, rec.start.int, arr)
@@ -590,8 +593,8 @@ proc to_tuples(targets: seq[Target]): seq[tuple[name: string, length: int]] =
     result[i] = (t.name, t.length.int)
 
 proc main(bam: hts.Bam, chrom: region_t, mapq: int, min_len: int, max_len: int, eflag: uint16, iflag: uint16, region: string, thresholds: seq[int],
-          fast_mode:bool, args: Table[string, docopt.Value], insert_size_mode:bool=false, gc_mode:bool=false, use_median:bool=false, 
-          fragment_mode=fragment_mode, midpoint_mode:bool=false, use_d4:bool=false) =
+          fast_mode: bool, args: Table[string, docopt.Value], insert_size_mode: bool = false, gc_mode: bool = false, use_median: bool = false, 
+          fragment_mode: bool = false, midpoint_mode: bool = false, use_d4: bool = false) =
   # windows are either from regions, or fixed-length windows.
   # we assume the input is sorted by chrom.
   var
@@ -901,8 +904,8 @@ Other options:
   -i --include-flag <FLAG>          only include reads with any of the bits in FLAG set. default is unset. [default: 0]
   -x --fast-mode                    dont look at internal cigar operations or correct mate overlaps (recommended for most use-cases).
   -S --insert-size-mode             extract the sum of insert sizes instead of coverage.
-  -G --gc-mode                      count up a GC weight via the 'GC' tag instead of 1. Allows using mosdepth with GCparagon. Current implementation multiplies the weights by 100 and converts to integers to maintain the integer array. So divide the output coverages by 100 to get the (rounded) weighted coverage.
-  -M --midpoint-mode <FLAG>         calculate the fragment midpoint coverage instead of the full fragment coverage.
+  -G --gc-mode                      count up a GC weight via the 'GC' tag instead of 1. Allows using mosdepth with GCparagon. Current implementation multiplies the weights by 100 and converts to integers to maintain the integer array. Divide the output coverages by 100 to get the (rounded) weighted coverage.
+  -M --midpoint-mode                calculate the fragment midpoint coverage. Requires `--fragment-mode`.
   -a --fragment-mode                count the coverage of the full fragment including the full insert (proper pairs only).
   -q --quantize <segments>          write quantized output see docs for description.
   -Q --mapq <mapq>                  mapping quality threshold. reads with a quality less than this value are ignored [default: 0]
@@ -949,6 +952,10 @@ Other options:
 
   if fragment_mode and fast_mode:
     stderr.write_line("[mosdepth] error only one of --fast-mode and --fragment-mode can be specified")
+    quit(2)
+
+  if midpoint_mode and not fragment_mode:
+    stderr.write_line("[mosdepth] error --midpoint-mode only works in --fragment-mode. Please specify both")
     quit(2)
 
   if $args["--by"] != "nil":
