@@ -235,6 +235,12 @@ proc init(arr: var coverage_t, tlen: int) =
       arr.set_len(int(tlen))
   zeroMem(arr[0].addr, len(arr) * sizeof(arr[0]))
 
+proc getFloatFromOption(opt: simpleoption.Option[float], err: string): float =
+  if opt.isSome:
+    return opt.get()
+  else:
+    raise newException(ValueError, err)
+
 proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, 
   targets: seq[Target], mapq: int = -1, min_len: int = -1, 
   max_len: int = int.high, eflag: uint16 = 1796, iflag: uint16 = 0, 
