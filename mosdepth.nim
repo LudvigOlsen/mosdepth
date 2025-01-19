@@ -345,16 +345,15 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, targets: 
     return -2
   return tgt.tid
 
-
 proc bed_to_table(bed: string): TableRef[string, seq[region_t]] =
   var bed_regions = newTable[string, seq[region_t]]()
-  var kstr = kstring_t(l:0, m: 0, s: nil)
-  var hf = hts_open(cstring(bed), "r")
-  while hts_getline(hf, cint(10), addr kstr) > 0:
-    if kstr.s[0] == 't' and ($kstr.s).startswith("track "):
+  var hf = hts_open(bed, "r")
+  var line: string
+  while hts_getline(hf, 10, line) > 0:
+    if line.len == 0: continue
+    if line[0] == '#' or (line[0] == 't' and line.startsWith("track ")):
       continue
-    if kstr.s[0] == '#':
-      continue
+    
     var v = bed_line_to_region($kstr.s)
     if v == nil: continue
     bed_regions.mgetOrPut(v.chrom, new_seq[region_t]()).add(v)
@@ -365,6 +364,26 @@ proc bed_to_table(bed: string): TableRef[string, seq[region_t]] =
 
   hts.free(kstr.s)
   return bed_regions
+
+# proc bed_to_table(bed: string): TableRef[string, seq[region_t]] =
+#   var bed_regions = newTable[string, seq[region_t]]()
+#   var kstr = kstring_t(l:0, m: 0, s: nil)
+#   var hf = hts_open(cstring(bed), "r")
+#   while hts_getline(hf, cint(10), addr kstr) > 0:
+#     if kstr.s[0] == 't' and ($kstr.s).startswith("track "):
+#       continue
+#     if kstr.s[0] == '#':
+#       continue
+#     var v = bed_line_to_region($kstr.s)
+#     if v == nil: continue
+#     bed_regions.mgetOrPut(v.chrom, new_seq[region_t]()).add(v)
+
+#   # since it is read into mem, can also well sort.
+#   for chrom, ivs in bed_regions.mpairs:
+#      sort(ivs, proc (a, b: region_t): int = int(a.start) - int(b.start))
+
+#   hts.free(kstr.s)
+#   return bed_regions
 
 iterator window_gen(window: uint32, t: hts.Target): region_t =
   var start:uint32 = 0
