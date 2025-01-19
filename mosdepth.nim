@@ -651,7 +651,9 @@ proc main(bam: hts.Bam, chrom: region_t, mapq: int, min_len: int, max_len: int, 
       bed_regions = bed_to_table(region)
   shallow(arr)
 
-  stderr.write_line("[mosdepth] stop for ram debugging")
+
+  sleep 30000
+  return 0 # TODO: Debugging RAM usage
 
   var cs = initCountStat[uint32](size=if use_median: 65536 else: 0)
 
