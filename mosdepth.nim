@@ -19,6 +19,12 @@ when defined(d4):
 var precision: int
 var output_summary_header = true
 
+# Reuse chrom strings to save memory
+var chromPool = initTable[string, string]()
+
+proc internChrom(chrom: string): string =
+  return chromPool.mgetOrPut(chrom, chrom)
+
 try:
   var tmp = getEnv("MOSDEPTH_PRECISION")
   precision = parse_int(tmp)
@@ -36,6 +42,7 @@ type
     name*: string
 
   coverage_t = seq[int32]
+
 
 proc `$`*(r: region_t): string =
   if r == nil:
@@ -189,7 +196,8 @@ proc bed_line_to_region(line: string): region_t =
    var
      s = S.parse_int(cse[1])
      e = S.parse_int(cse[2])
-     reg = region_t(chrom: cse[0], start: uint32(s), stop: uint32(e))
+     c = internChrom(cse[0])
+     reg = region_t(chrom: c, start: uint32(s), stop: uint32(e))
    doAssert s <= e, "[slivar] ERROR: start > end in bed line:" & line
    if len(cse) > 3:
      reg.name = cse[3].strip()
@@ -349,17 +357,12 @@ proc bed_to_table(bed: string): TableRef[string, seq[region_t]] =
   var bed_regions = newTable[string, seq[region_t]]()
   var kstr = kstring_t(l:0, m: 0, s: nil)
   var hf = hts_open(cstring(bed), "r")
-  var line: string
   while hts_getline(hf, cint(10), addr kstr) > 0:
-    line = $(kstr.s)
-    if line.len == 0: continue
-
-    if line[0] == 't' and line.startswith("track "):
+    if kstr.s[0] == 't' and ($kstr.s).startswith("track "):
       continue
-    if line[0] == '#':
+    if kstr.s[0] == '#':
       continue
-
-    var v = bed_line_to_region(line)
+    var v = bed_line_to_region($kstr.s)
     if v == nil: continue
     bed_regions.mgetOrPut(v.chrom, new_seq[region_t]()).add(v)
 
@@ -369,26 +372,6 @@ proc bed_to_table(bed: string): TableRef[string, seq[region_t]] =
 
   hts.free(kstr.s)
   return bed_regions
-
-# proc bed_to_table(bed: string): TableRef[string, seq[region_t]] =
-#   var bed_regions = newTable[string, seq[region_t]]()
-#   var kstr = kstring_t(l:0, m: 0, s: nil)
-#   var hf = hts_open(cstring(bed), "r")
-#   while hts_getline(hf, cint(10), addr kstr) > 0:
-#     if kstr.s[0] == 't' and ($kstr.s).startswith("track "):
-#       continue
-#     if kstr.s[0] == '#':
-#       continue
-#     var v = bed_line_to_region($kstr.s)
-#     if v == nil: continue
-#     bed_regions.mgetOrPut(v.chrom, new_seq[region_t]()).add(v)
-
-#   # since it is read into mem, can also well sort.
-#   for chrom, ivs in bed_regions.mpairs:
-#      sort(ivs, proc (a, b: region_t): int = int(a.start) - int(b.start))
-
-#   hts.free(kstr.s)
-#   return bed_regions
 
 iterator window_gen(window: uint32, t: hts.Target): region_t =
   var start:uint32 = 0
