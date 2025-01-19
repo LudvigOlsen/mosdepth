@@ -653,7 +653,7 @@ proc main(bam: hts.Bam, chrom: region_t, mapq: int, min_len: int, max_len: int, 
 
 
   sleep 30000
-  return 0 # TODO: Debugging RAM usage
+  quit(2) # TODO: Debugging RAM usage
 
   var cs = initCountStat[uint32](size=if use_median: 65536 else: 0)
 
