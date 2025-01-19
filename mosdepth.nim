@@ -347,14 +347,19 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t, targets: 
 
 proc bed_to_table(bed: string): TableRef[string, seq[region_t]] =
   var bed_regions = newTable[string, seq[region_t]]()
-  var hf = hts_open(bed, "r")
+  var kstr = kstring_t(l:0, m: 0, s: nil)
+  var hf = hts_open(cstring(bed), "r")
   var line: string
-  while hts_getline(hf, 10, line) > 0:
+  while hts_getline(hf, cint(10), addr kstr) > 0:
+    line = $(kstr.s)
     if line.len == 0: continue
-    if line[0] == '#' or (line[0] == 't' and line.startsWith("track ")):
+
+    if line[0] == 't' and line.startswith("track "):
       continue
-    
-    var v = bed_line_to_region($kstr.s)
+    if line[0] == '#':
+      continue
+
+    var v = bed_line_to_region(line)
     if v == nil: continue
     bed_regions.mgetOrPut(v.chrom, new_seq[region_t]()).add(v)
 
