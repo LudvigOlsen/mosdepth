@@ -1,3 +1,15 @@
+v0.3.11
+=======
++ add --fragment-mode (#246 from @LudvigOlsen). calculates coverage over a full fragment, including insert.
+
+v0.3.10
+=======
++ write sfi index in d4 files (#243)
+
+v0.3.9
+======
++ fix d4 output (#237)
+
 v0.3.8
 ======
 + mosdepth is now much faster on bams/crams with a large number of contigs (#229)

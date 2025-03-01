@@ -8,9 +8,7 @@ fast BAM/CRAM depth calculation for **WGS**, **exome**, or **targeted sequencing
 
 ![logo](https://user-images.githubusercontent.com/1739/29678184-da1f384c-88ba-11e7-9d98-df4fe3a59924.png "logo")
 
-[![Build](https://github.com/brentp/mosdepth/workflows/Build/badge.svg?branch=master)](https://github.com/brentp/mosdepth/actions?query=workflow%3ABuild)
-
-[![citation](https://img.shields.io/badge/cite-open%20access-orange.svg)](https://academic.oup.com/bioinformatics/article/doi/10.1093/bioinformatics/btx699/4583630?guestAccessKey=35b55064-4566-4ab3-a769-32916fa1c6e6)
+[![Build](https://github.com/brentp/mosdepth/actions/workflows/build.yml/badge.svg)](https://github.com/brentp/mosdepth/actions/workflows/build.yml) [![citation](https://img.shields.io/badge/cite-open%20access-orange.svg)](https://academic.oup.com/bioinformatics/article/doi/10.1093/bioinformatics/btx699/4583630?guestAccessKey=35b55064-4566-4ab3-a769-32916fa1c6e6)
 
 `mosdepth` can output:
 
@@ -29,7 +27,7 @@ when appropriate, the output files are bgzipped and indexed for ease of use.
 ## usage
 
 ```
-mosdepth 0.3.6
+mosdepth 0.3.11
 
   Usage: mosdepth [options] <prefix> <BAM-or-CRAM>
 
@@ -52,7 +50,6 @@ Common Options:
   -n --no-per-base           dont output per-base depth. skipping this output will speed execution
                              substantially. prefer quantized or thresholded values if possible.
   -f --fasta <fasta>         fasta file for use with CRAM files [default: ].
-  --d4                       output per-base depth in d4 format.
 
 Other options:
 
@@ -61,6 +58,7 @@ Other options:
   -x --fast-mode                    dont look at internal cigar operations or correct mate overlaps (recommended for most use-cases).
   -S --insert-size-mode             extract the sum of insert sizes instead of coverage.
   -G --gc-mode                      count up a GC weight via the 'GC' tag instead of 1. Allows using mosdepth with GCparagon. Current implementation multiplies the weights by 100 and converts to integers to maintain the integer array. So divide the output coverages by 100 to get the (rounded) weighted coverage.
+  -a --fragment-mode                count the coverage of the full fragment including the full insert (proper pairs only).
   -q --quantize <segments>          write quantized output see docs for description.
   -Q --mapq <mapq>                  mapping quality threshold. reads with a quality less than this value are ignored [default: 0]
   -l --min-frag-len <min-frag-len>  minimum insert size. reads with a smaller insert size than this are ignored [default: -1]
