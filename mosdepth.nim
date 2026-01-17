@@ -264,12 +264,17 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t,
   tgt = targets[tid]
 
   var found = false
+  var frag_len = 0
   for rec in bam.regions(region, tid, targets):
     if not found:
       arr.init(int(tgt.length+1))
       found = true
     if int(rec.mapping_quality) < mapq: continue
-    if int(abs(rec.isize)) < min_len or int(abs(rec.isize)) > max_len: continue
+    if single_end_length:
+      frag_len = int(rec.stop - rec.start)
+    else:
+      frag_len = int(abs(rec.isize))
+    if frag_len < min_len or frag_len > max_len: continue
     if (rec.flag and eflag) != 0:
       continue
     if iflag != 0 and ((rec.flag and iflag) == 0):
@@ -285,7 +290,7 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t,
     var gc_weight: float64 = 0.0
     if insert_size_mode:
       if single_end_length:
-        step = int32(rec.stop - rec.start)
+        step = int32(frag_len)
       else:
         step = int32(abs(rec.isize))
     elif gc_mode:
@@ -913,7 +918,7 @@ Other options:
   -i --include-flag <FLAG>          only include reads with any of the bits in FLAG set. default is unset. [default: 0]
   -x --fast-mode                    dont look at internal cigar operations or correct mate overlaps (recommended for most use-cases).
   -S --insert-size-mode             extract the sum of insert sizes instead of coverage.
-  -e --single-end-length            insert-size-mode counts single-end read lengths instead of tlen.
+  -e --single-end-length            the fragment length is defined as the single-end read length instead of tlen. Used in min/max length filtering and insert-size-mode.
   -G --gc-mode                      count up a GC weight via the 'GC' tag instead of 1. Allows using mosdepth with GCparagon. Current implementation multiplies the weights by 100 and converts to integers to maintain the integer array. Divide the output coverages by 100 to get the (rounded) weighted coverage.
   -M --midpoint-mode                calculate the fragment midpoint coverage. Requires `--fragment-mode`.
   -a --fragment-mode                count the coverage of the full fragment including the full insert (proper pairs only).
