@@ -245,8 +245,8 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t,
   targets: seq[Target], mapq: int = -1, min_len: int = -1, 
   max_len: int = int.high, eflag: uint16 = 1796, iflag: uint16 = 0, 
   read_groups: seq[string] = (@[]), fast_mode: bool = false, 
-  last_tid: var int = -1, insert_size_mode: bool, gc_mode: bool, 
-  fragment_mode: bool, midpoint_mode : bool): int =
+  last_tid: var int = -1, insert_size_mode: bool, single_end_length: bool, 
+  gc_mode: bool, fragment_mode: bool, midpoint_mode : bool): int =
   # depth updates arr in-place and yields the tid for each chrom.
   # returns -1 if the chrom is not found in the bam header
   # returns -2 if the chrom was found in the header, but there was no data for it
@@ -284,7 +284,10 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t,
     var step: int32 = 1
     var gc_weight: float64 = 0.0
     if insert_size_mode:
-      step = int32(abs(rec.isize))
+      if single_end_length:
+        step = int32(rec.stop - rec.start)
+      else:
+        step = int32(abs(rec.isize))
     elif gc_mode:
       gc_weight = float64(getFloatFromOption(tag[system.float](rec, "GC"), "no GC tag was found in a record. All records (reads) must have the GC tag."))
       if gc_weight <= float64(0.0):
@@ -599,8 +602,8 @@ proc to_tuples(targets: seq[Target]): seq[tuple[name: string, length: int]] =
     result[i] = (t.name, t.length.int)
 
 proc main(bam: hts.Bam, chrom: region_t, mapq: int, min_len: int, max_len: int, eflag: uint16, iflag: uint16, region: string, thresholds: seq[int],
-          fast_mode: bool, args: Table[string, docopt.Value], insert_size_mode: bool = false, gc_mode: bool = false, use_median: bool = false, 
-          fragment_mode: bool = false, midpoint_mode: bool = false, use_d4: bool = false) =
+          fast_mode: bool, args: Table[string, docopt.Value], insert_size_mode: bool = false, single_end_length: bool = false, gc_mode: bool = false, 
+          use_median: bool = false, fragment_mode: bool = false, midpoint_mode: bool = false, use_d4: bool = false) =
   # windows are either from regions, or fixed-length windows.
   # we assume the input is sorted by chrom.
   var
@@ -713,8 +716,8 @@ proc main(bam: hts.Bam, chrom: region_t, mapq: int, min_len: int, max_len: int, 
     rchrom = region_t(chrom: target.name)
     var tid = coverage(bam, arr, rchrom, targets, mapq, min_len, max_len, eflag, 
         iflag, read_groups=read_groups, fast_mode=fast_mode, last_tid=last_tid, 
-        insert_size_mode=insert_size_mode, gc_mode=gc_mode, 
-        fragment_mode=fragment_mode, midpoint_mode=midpoint_mode)
+        insert_size_mode=insert_size_mode, single_end_length=single_end_length, 
+        gc_mode=gc_mode, fragment_mode=fragment_mode, midpoint_mode=midpoint_mode)
     if tid == -1: continue # -1 means that chrom is not even in the bam
     if tid != -2: # -2 means there were no reads in the bam
       arr.to_coverage()
@@ -910,6 +913,7 @@ Other options:
   -i --include-flag <FLAG>          only include reads with any of the bits in FLAG set. default is unset. [default: 0]
   -x --fast-mode                    dont look at internal cigar operations or correct mate overlaps (recommended for most use-cases).
   -S --insert-size-mode             extract the sum of insert sizes instead of coverage.
+  -e --single-end-length            insert-size-mode counts single-end read lengths instead of tlen.
   -G --gc-mode                      count up a GC weight via the 'GC' tag instead of 1. Allows using mosdepth with GCparagon. Current implementation multiplies the weights by 100 and converts to integers to maintain the integer array. Divide the output coverages by 100 to get the (rounded) weighted coverage.
   -M --midpoint-mode                calculate the fragment midpoint coverage. Requires `--fragment-mode`.
   -a --fragment-mode                count the coverage of the full fragment including the full insert (proper pairs only).
@@ -947,6 +951,7 @@ Other options:
     fast_mode: bool = args["--fast-mode"]
     fragment_mode: bool = args["--fragment-mode"]
     insert_size_mode: bool = args["--insert-size-mode"]
+    single_end_length: bool = args["--single-end-length"]
     gc_mode: bool = args["--gc-mode"]
     midpoint_mode: bool = args["--midpoint-mode"]
     use_median: bool = args["--use-median"]
@@ -1002,7 +1007,7 @@ Other options:
   check_chrom(chrom, bam.hdr.targets)
 
   main(bam, chrom, mapq, min_len, max_len, eflag, iflag, region, thresholds, 
-      fast_mode, args, insert_size_mode=insert_size_mode, gc_mode=gc_mode, 
-      use_median=use_median, fragment_mode=fragment_mode, 
+      fast_mode, args, insert_size_mode=insert_size_mode, single_end_length=single_end_length,
+      gc_mode=gc_mode, use_median=use_median, fragment_mode=fragment_mode, 
       midpoint_mode=midpoint_mode, use_d4=use_d4)
 
