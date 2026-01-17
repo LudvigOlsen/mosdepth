@@ -35,7 +35,7 @@ type
     stop*: uint32
     name*: string
 
-  coverage_t = seq[int32]
+  coverage_t {.shallow.} = seq[int32]
 
 proc `$`*(r: region_t): string =
   if r == nil:
@@ -351,7 +351,7 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t,
               last_pos = p.pos
             if pair_depth != 0: echo $rec.qname & ":" & $rec & " " &
                 $mate.qname & ":" & $mate & " " & $pair_depth
-    
+
     if fast_mode:
       arr[rec.start] += step
       arr[rec.stop] -= step
@@ -360,7 +360,7 @@ proc coverage(bam: hts.Bam, arr: var coverage_t, region: var region_t,
       # only count read1 from proper pairs
       if rec.flag.read2 or (not rec.flag.proper_pair) or rec.flag.supplementary:
         continue
-      
+
       var fragment_start = min(rec.start, rec.matepos)
 
       if midpoint_mode:
@@ -879,7 +879,7 @@ when(isMainModule):
   when not defined(release) and not defined(lto):
     stderr.write_line "[mosdepth] WARNING: built in debug mode; will be slow"
 
-  let version = "mosdepth 0.3.11"
+  let version = "mosdepth 0.3.12"
   let env_fasta = getEnv("REF_PATH")
   var doc = format("""
   $version
