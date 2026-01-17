@@ -57,6 +57,7 @@ Other options:
   -i --include-flag <FLAG>          only include reads with any of the bits in FLAG set. default is unset. [default: 0]
   -x --fast-mode                    dont look at internal cigar operations or correct mate overlaps (recommended for most use-cases).
   -S --insert-size-mode             extract the sum of insert sizes instead of coverage.
+  -e --single-end-length            insert-size-mode counts single-end read lengths instead of tlen.
   -G --gc-mode                      count up a GC weight via the 'GC' tag instead of 1. Allows using mosdepth with GCparagon. Current implementation multiplies the weights by 100 and converts to integers to maintain the integer array. So divide the output coverages by 100 to get the (rounded) weighted coverage.
   -a --fragment-mode                count the coverage of the full fragment including the full insert (proper pairs only).
   -q --quantize <segments>          write quantized output see docs for description.
